@@ -29,5 +29,43 @@
 
 /** @brief Read buffer for socket read? */
 #define MAX_BUF 4096
+#define IEEE80211_NWID_LEN              32
+time_t wd_get_redirect_timestamp(unsigned char *mac);
+unsigned char wd_get_redirect_cpauthstatus(unsigned char *mac);
+#define COPY_MACADDRESS(from,to,count) for(count=0;count<6;count++) \
+                to[count] = from[count];
 
+#define NIPQUAD(addr) \
+        ((unsigned char *)&addr)[0], \
+        ((unsigned char *)&addr)[1], \
+        ((unsigned char *)&addr)[2], \
+        ((unsigned char *)&addr)[3]
+
+typedef struct disassoc_Trap {
+        char            disassocMacAddr[18];
+        char            disassocBssid[18];
+        char            disassocSsid[32];
+        int             disassocReason;
+        unsigned int    ns_tx_payload;      /* payload bytes sent to the client */
+        unsigned int    ns_rx_payload;      /* payload bytes received from the client */
+        char            ipaddr[18];         /* IP Address of client */ 
+}disassoc_Trap;
+
+struct notification_info
+{
+    u_int8_t                ssidlen;  /*ssid len to which station is(was) connected*/
+    u_int8_t                ssid[IEEE80211_NWID_LEN+1]; /* ssid to which station is(was) connected*/
+    u_int32_t               ns_rx_payload;      /*payload bytes received from the client*/
+    u_int32_t               ns_tx_payload;      /*payload bytes sent to the client*/
+    u_int32_t               ipaddr; /*IP Address of client*/
+    /*ADD ANY OTHER INFO NEEDED HERE*/
+};
+
+struct custom_event_data
+{
+   u_int8_t addr[6];
+   u_int8_t reason;
+   u_int8_t rssi;
+   struct notification_info xinfo;
+};
 #endif /* _COMMON_H_ */

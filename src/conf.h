@@ -43,7 +43,8 @@
 #define DEFAULT_DEBUGLEVEL LOG_INFO
 #define DEFAULT_HTTPDMAXCONN 10
 #define DEFAULT_GATEWAYID NULL
-#define DEFAULT_GATEWAYPORT 2060
+/*#define DEFAULT_GATEWAYPORT 2060*/
+#define DEFAULT_GATEWAYPORT 0
 #define DEFAULT_HTTPDNAME "WiFiDog"
 #define DEFAULT_CLIENTTIMEOUT 5
 #define DEFAULT_CHECKINTERVAL 60
@@ -171,6 +172,8 @@ typedef struct {
     char *gw_interface;         /**< @brief Interface we will accept connections on */
     char *gw_address;           /**< @brief Internal IP address for our web
 				     server */
+    char *gw_address2;		/**< @brief Temporary secondary IP address for our 
+				     web server */
     int gw_port;                /**< @brief Port the webserver will run on */
 
     t_auth_serv *auth_servers;  /**< @brief Auth servers list */
@@ -178,6 +181,11 @@ typedef struct {
 				     replying to a request */
     int httpdmaxconn;           /**< @brief Used by libhttpd, not sure what it
 				     does */
+    int operate_mode;
+    char *portal[16];
+    int   status[16];
+    char *portal_last_ip;
+
     char *httpdrealm;           /**< @brief HTTP Authentication realm */
     char *httpdusername;        /**< @brief Username for HTTP authentication */
     char *httpdpassword;        /**< @brief Password for HTTP authentication */

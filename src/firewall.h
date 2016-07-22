@@ -61,6 +61,9 @@ int fw_allow_host(const char *);
 /** @brief Deny a client access through the firewall*/
 int fw_deny(t_client *);
 
+/** PRATIK */
+void fw_mark_mangle(char *mac, int action);
+
 /** @brief Passthrough for clients when auth server is down */
 int fw_set_authdown(void);
 

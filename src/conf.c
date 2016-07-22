@@ -85,6 +85,23 @@ typedef enum {
     oAuthServMsgScriptPathFragment,
     oAuthServPingScriptPathFragment,
     oAuthServAuthScriptPathFragment,
+    oOperateMode,
+    oPortal0,
+    oPortal1,
+    oPortal2,
+    oPortal3,
+    oPortal4,
+    oPortal5,
+    oPortal6,
+    oPortal7,
+    oStatus0,
+    oStatus1,
+    oStatus2,
+    oStatus3,
+    oStatus4,
+    oStatus5,
+    oStatus6,
+    oStatus7,
     oHTTPDMaxConn,
     oHTTPDName,
     oHTTPDRealm,
@@ -150,7 +167,24 @@ static const struct {
     "sslpeerverification", oSSLPeerVerification}, {
     "sslcertpath", oSSLCertPath}, {
     "sslallowedcipherlist", oSSLAllowedCipherList}, {
-    "sslusesni", oSSLUseSNI}, {
+    "sslusesni", oSSLUseSNI},
+    { "operatemode",                oOperateMode },
+    { "portal0",            oPortal0 },
+    { "portal1",            oPortal1 },
+    { "portal2",            oPortal2 },
+    { "portal3",            oPortal3 },
+    { "portal4",            oPortal4 },
+    { "portal5",            oPortal5 },
+    { "portal6",            oPortal6 },
+    { "portal7",            oPortal7 },
+    { "status0",            oStatus0 },
+    { "status1",            oStatus1 },
+    { "status2",            oStatus2 },
+    { "status3",            oStatus3 },
+    { "status4",            oStatus4 },
+    { "status5",            oStatus5 },
+    { "status6",            oStatus6 },
+    { "status7",            oStatus7 }, {
 NULL, oBadOption},};
 
 static void config_notnull(const void *, const char *);
@@ -194,6 +228,8 @@ config_init(void)
     config.httpdpassword = NULL;
     config.clienttimeout = DEFAULT_CLIENTTIMEOUT;
     config.checkinterval = DEFAULT_CHECKINTERVAL;
+    config.portal[0] = NULL;
+    config.portal_last_ip = NULL;
     config.daemon = -1;
     config.pidfile = NULL;
     config.wdctl_sock = safe_strdup(DEFAULT_WDCTL_SOCK);
@@ -723,6 +759,57 @@ config_read(const char *filename)
                 case oGatewayAddress:
                     config.gw_address = safe_strdup(p1);
                     break;
+                case oOperateMode:
+                    sscanf(p1, "%d", &config.operate_mode);
+                    break;
+                case oPortal0:
+                    config.portal[0] = safe_strdup(p1);
+                    break;
+                case oPortal1:
+                    config.portal[1] = safe_strdup(p1);
+                    break;
+                case oPortal2:
+                    config.portal[2] = safe_strdup(p1);
+                    break;
+                case oPortal3:
+                    config.portal[3] = safe_strdup(p1);
+                    break;
+                case oPortal4:
+                    config.portal[4] = safe_strdup(p1);
+                    break;
+                case oPortal5:
+                    config.portal[5] = safe_strdup(p1);
+                    break;
+                case oPortal6:
+                    config.portal[6] = safe_strdup(p1);
+                    break;
+                case oPortal7:
+                    config.portal[7] = safe_strdup(p1);
+                    break;
+                case oStatus0:
+                    sscanf(p1, "%d", &config.status[0]);
+                    break;
+                case oStatus1:
+                    sscanf(p1, "%d", &config.status[1]);
+                    break;
+                case oStatus2:
+                    sscanf(p1, "%d", &config.status[2]);
+                    break;
+                case oStatus3:
+                    sscanf(p1, "%d", &config.status[3]);
+                    break;
+                case oStatus4:
+                    sscanf(p1, "%d", &config.status[4]);
+                    break;
+                case oStatus5:
+                    sscanf(p1, "%d", &config.status[5]);
+                    break;
+                case oStatus6:
+                    sscanf(p1, "%d", &config.status[6]);
+                    break;
+                case oStatus7:
+                    sscanf(p1, "%d", &config.status[7]);
+                    break;
                 case oGatewayPort:
                     sscanf(p1, "%d", &config.gw_port);
                     break;
@@ -1004,6 +1091,17 @@ parse_popular_servers(const char *ptr)
 void
 config_validate(void)
 {
+    config_notnull(config.portal[0] , "Portal0");
+    if (!missing_parms)
+    {
+        debug(LOG_DEBUG, "Portal0 is set, not looking for authentication server...");
+        return;
+    }
+    else
+    {
+        debug(LOG_DEBUG, "Portal0 is not set, looking for authentication server...");
+        missing_parms = 0;
+    }
     config_notnull(config.gw_interface, "GatewayInterface");
     config_notnull(config.auth_servers, "AuthServer");
     validate_popular_servers();

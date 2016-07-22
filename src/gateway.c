@@ -43,6 +43,7 @@
 /* for unix socket communication*/
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <netinet/in.h>
 
 #include "common.h"
 #include "httpd.h"
@@ -59,6 +60,7 @@
 #include "ping_thread.h"
 #include "httpd_thread.h"
 #include "util.h"
+#include "wireless_event_thread.h"
 
 /** XXX Ugly hack 
  * We need to remember the thread IDs of threads that simulate wait with pthread_cond_timedwait
@@ -66,6 +68,7 @@
  */
 static pthread_t tid_fw_counter = 0;
 static pthread_t tid_ping = 0;
+static pthread_t tid_wireless_event = 0;
 
 time_t started_time = 0;
 
@@ -287,6 +290,10 @@ termination_handler(int s)
         debug(LOG_INFO, "Explicitly killing the ping thread");
         pthread_kill(tid_ping, SIGKILL);
     }
+    if (tid_wireless_event) {
+      debug(LOG_INFO, "Explicitly killing the wireless_event thread");
+      pthread_kill(tid_wireless_event, SIGKILL);
+    }
 
     debug(LOG_NOTICE, "Exiting...");
     exit(s == 0 ? 1 : 0);
@@ -380,6 +387,19 @@ main_loop(void)
         debug(LOG_DEBUG, "%s = %s", config->gw_interface, config->gw_address);
     }
 
+    #if 0
+    if (!config->gw_address2) {
+	char buf[32];
+	sprintf(buf, "%s:1", config->gw_interface);
+        debug(LOG_DEBUG, "Finding IP address of %s", buf);
+        if ((config->gw_address2 = get_iface_ip(buf)) == NULL) {
+            debug(LOG_ERR, "Could not get IP address information of %s, exiting...", buf);
+            exit(1);
+        }
+        debug(LOG_DEBUG, "%s = %s", buf, config->gw_address2);
+    }
+    #endif
+
     /* If we don't have the Gateway ID, construct it from the internal MAC address.
      * "Can't fail" so exit() if the impossible happens. */
     if (!config->gw_id) {
@@ -393,10 +413,25 @@ main_loop(void)
 
     /* Initializes the web server */
     debug(LOG_NOTICE, "Creating web server on %s:%d", config->gw_address, config->gw_port);
-    if ((webserver = httpdCreate(config->gw_address, config->gw_port)) == NULL) {
+    if ((webserver = httpdCreate("0.0.0.0", config->gw_port)) == NULL) {
         debug(LOG_ERR, "Could not create web server: %s", strerror(errno));
         exit(1);
     }
+
+    {
+	/* find out what port was assigned */
+	int namelen = 0;
+	struct sockaddr_in server;
+	memset(&server, 0, sizeof(server));
+	namelen = sizeof(server);
+	if(getsockname( webserver->serverSock, (struct sockaddr *) &server, &namelen) < 0 ) {
+	    fprintf(stderr, "getsockname() failed to get port number\n");
+	    exit(4);
+	}
+	fprintf(stderr,"The assigned port is %d\n", ntohs( server.sin_port));
+	config->gw_port = ntohs(server.sin_port);
+    }
+
     register_fd_cleanup_on_fork(webserver->serverSock);
 
     debug(LOG_DEBUG, "Assigning callbacks to web server");
@@ -404,7 +439,7 @@ main_loop(void)
     httpdAddCContent(webserver, "/wifidog", "", 0, NULL, http_callback_wifidog);
     httpdAddCContent(webserver, "/wifidog", "about", 0, NULL, http_callback_about);
     httpdAddCContent(webserver, "/wifidog", "status", 0, NULL, http_callback_status);
-    httpdAddCContent(webserver, "/wifidog", "auth", 0, NULL, http_callback_auth);
+    httpdAddCContent(webserver, "/", "auth", 0, NULL, http_callback_auth);
     httpdAddCContent(webserver, "/wifidog", "disconnect", 0, NULL, http_callback_disconnect);
 
     httpdSetErrorFunction(webserver, 404, http_callback_404);
@@ -416,6 +451,15 @@ main_loop(void)
         debug(LOG_ERR, "FATAL: Failed to initialize firewall");
         exit(1);
     }
+
+    /* Start wireless thread */
+    result = pthread_create(&tid_wireless_event, NULL, (void *)thread_wireless_event,
+                config->gw_interface);
+    if (result != 0) {
+        debug(LOG_ERR, "FATAL: Failed to create a new thread (wireless_event) - exiting");
+        termination_handler(0);
+    }
+    pthread_detach(tid_wireless_event);
 
     /* Start clean up thread */
     result = pthread_create(&tid_fw_counter, NULL, (void *)thread_client_timeout_check, NULL);

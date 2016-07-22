@@ -411,3 +411,31 @@ save_pid_file(const char *pf)
 
     return;
 }
+
+void formatmacaddr(char *macAddrStr, char *buf)
+{
+   int ret = 0;
+   int i, j = 0;
+//   char buf[13];
+//   char *macAddrStr="aa:bb:cc:dd:ee:ff";
+   if (macAddrStr && strlen(macAddrStr) == 17) {
+      for (i = 0; i < 17; i++) {
+         unsigned char c = macAddrStr[i];
+         if (i%3 == 2) {
+            if (c != ':') {
+// We expect every three characters to have a colon, if there
+// isn't one, abort.
+               goto exit;
+            }
+         } else if (isxdigit(c)) {
+            buf[j++]= c;
+         } else {
+            // The string contains a non hexadecimal character, abort.
+            goto exit;
+         }
+      }
+      buf[12] = 0;
+   }
+exit:
+    return 0;
+}

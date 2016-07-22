@@ -41,6 +41,11 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#include <linux/types.h>        /* for "caddr_t" et al      */
+#include <net/if.h>
+#include <netinet/if_ether.h>
+#include <linux/ip.h>
+#include <netinet/in.h>
 #include "httpd.h"
 
 #include "safe.h"
@@ -54,9 +59,406 @@
 #include "centralserver.h"
 #include "util.h"
 #include "wd_util.h"
+#include "br_event.h"
+#include "fw_iptables.h"
 
 #include "../config.h"
 
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <time.h>
+#include <sys/time.h>
+#include <sys/un.h>
+
+#define IS_NULL(x)  ((x) ? (x) : "<NULL>")
+
+extern pthread_mutex_t  client_list_mutex;
+
+typedef struct __t_redir_node {
+    struct __t_redir_node *next;
+    char *mac;
+    char redir_pending;
+    char route_added;
+    char dev[IFNAMSIZ];
+    char host_ip[32];
+    char dev_ip[32];
+    time_t expiry;
+    int ifindex;
+    unsigned char cpAuthstatus;
+} t_redir_node;
+
+t_redir_node *first_redir_node = NULL;
+//int redir_pending = 0;
+pthread_mutex_t redir_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+#define LOCK_REDIR() do { \
+            pthread_mutex_lock(&redir_mutex); \
+} while (0)
+
+#define UNLOCK_REDIR() do { \
+            pthread_mutex_unlock(&redir_mutex); \
+} while (0)
+
+#define TRYLOCK_REDIR() pthread_mutex_trylock(&redir_mutex) 
+#define MAX_HOSTNAME_RESOLVE_TIMEOUT 300
+
+static struct cphostname_resolver{
+        int index;
+        time_t timestamp;
+}timekeeper[16];
+
+t_redir_node *
+redir_list_find(char *mac)
+{
+    t_redir_node *ptr;
+
+    ptr = first_redir_node;
+    while (NULL != ptr) {
+        if (!strcmp(ptr->mac, mac))
+            return ptr;
+        ptr = ptr->next;
+    }
+
+    return NULL;
+}
+
+time_t wd_get_redirect_timestamp(unsigned char *mac)
+{
+	time_t assoctime;
+	t_redir_node *node;
+
+	LOCK_REDIR();
+	node = redir_list_find(mac);
+	if(node){
+		assoctime = node->expiry;	
+	}else{
+		assoctime = time(NULL);
+	}
+	UNLOCK_REDIR(); 
+	return assoctime;
+}
+
+unsigned char wd_get_redirect_cpauthstatus(unsigned char *mac)
+{
+	t_redir_node *node;
+	unsigned char status;
+
+	LOCK_REDIR();
+	node = redir_list_find(mac);
+	if(node){
+		status = node->cpAuthstatus;	
+	}else{
+		status = 2;
+	}
+	UNLOCK_REDIR();
+	return status;
+}
+
+t_redir_node *redir_list_append(char *mac)
+{
+    t_redir_node *curnode, *prevnode;
+
+    prevnode = NULL;
+    curnode = first_redir_node;
+
+    while (curnode != NULL) {
+        prevnode = curnode;
+        curnode = curnode->next;
+    }
+
+    curnode = malloc(sizeof(t_redir_node));
+    if (curnode == NULL)
+        return NULL;
+    memset(curnode, 0, sizeof(t_redir_node));
+    curnode->mac = strdup(mac);
+    curnode->ifindex = 20;
+    curnode->cpAuthstatus = 1;
+    if (prevnode == NULL) {
+        first_redir_node = curnode;
+    } else {
+        prevnode->next = curnode;
+    }
+
+    return curnode;
+}
+
+void
+free_redir_node(t_redir_node *node)
+{
+
+    if (node->mac != NULL)
+	free(node->mac);
+
+    free(node);
+}
+
+
+
+void
+redir_list_delete(t_redir_node *node)
+{
+    t_redir_node *ptr;
+
+    ptr = first_redir_node;
+
+    if (ptr == NULL) {
+        debug(LOG_ERR, "Node list empty!");
+    } else if (ptr == node) {
+        first_redir_node = ptr->next;
+        free_redir_node(node);
+    } else {
+        /* Loop forward until we reach our point in the list. */
+        while (ptr->next != NULL && ptr->next != node) {
+            ptr = ptr->next;
+        }
+        /* If we reach the end before finding out element, complain. */
+        if (ptr->next == NULL) {
+            debug(LOG_ERR, "Node to delete could not be found.");
+        /* Free element. */
+        } else {
+            ptr->next = node->next;
+            free_redir_node(node);
+        }
+    }
+}
+
+void notify_add_route(struct brreq *brreq, char *mac)
+{
+    t_client *client;
+    t_redir_node *node;
+
+    LOCK_REDIR();
+
+    node = redir_list_find(mac);
+    if (!node) {
+        debug(LOG_NOTICE, "%s: %s node not present, creating it with src interface %s\n",__func__,mac, brreq->ifname);
+        node = redir_list_append(mac);
+        if(node){
+            node->expiry = time(NULL);
+            fw_mark_mangle(mac,1);
+        }
+    }
+    if (!node) {
+        UNLOCK_REDIR();
+        return;
+    }
+
+    node->ifindex = get_ifIndex(brreq->ifname);
+    node->redir_pending = 1;
+
+    //  if (!node->redir_pending) {
+    {
+        struct in_addr src_ip;
+        char cmd[256];
+        char *tmp_ptr;
+        /* Get the Host IP address */
+        src_ip.s_addr = brreq->iph.saddr;
+        memset(node->host_ip, 0, sizeof(node->host_ip));
+        tmp_ptr = inet_ntoa(src_ip);
+        if (tmp_ptr)
+            strcpy(node->host_ip, tmp_ptr);
+        /* Copy the device name to node */
+        strcpy(node->dev, brreq->dev);
+        /* Get the interface IP address */
+        memset(node->dev_ip, 0, sizeof(node->dev_ip));
+        tmp_ptr = get_iface_ip(node->dev);
+        if (tmp_ptr)
+            strcpy(node->dev_ip, tmp_ptr);
+        /* Set the host route */
+        memset(cmd, 0, sizeof(cmd));
+        sprintf(cmd, "/bin/ip route add %s/32 src %s dev %s", node->host_ip, node->dev_ip, node->dev);
+        //printf("\nexecuting %s\n", cmd);
+        execute(cmd, 0);
+        node->route_added = 1;
+        free(tmp_ptr);
+    }
+    UNLOCK_REDIR();
+}
+
+void notify_mark_cpauthstatus(struct brreq *brreq, char *mac)
+{
+    t_redir_node *node;
+
+    LOCK_REDIR();
+    node = redir_list_find(mac);
+    if(!node){
+        UNLOCK_REDIR();
+        return;
+    }
+    node->cpAuthstatus = (brreq->cpauthstatus == 1)? 1 : 0;
+    debug(LOG_ERR, "**************cpauthstatus = %d*************",node->cpAuthstatus);
+    UNLOCK_REDIR();
+}
+int get_ifIndex(char *ifname){
+
+    if(!ifname)
+        return 0;                      /* Safe to return atleast a valid value */
+    else if(!strcmp(ifname, "wifi0vap0"))
+        return 0;
+    else if(!strcmp(ifname, "wifi0vap1"))
+        return 1;
+    else if(!strcmp(ifname, "wifi0vap2"))
+        return 2;
+    else if(!strcmp(ifname, "wifi0vap3"))
+        return 3;
+    else if(!strcmp(ifname, "wifi1vap0"))
+        return 4;
+    else if(!strcmp(ifname, "wifi1vap1"))
+        return 5;
+    else if(!strcmp(ifname, "wifi1vap2"))
+        return 6;
+    else if(!strcmp(ifname, "wifi1vap3"))
+        return 7;
+    else
+        return 0 ;
+}
+void make_proc_entry_for_url(char *hoststr, int ifIndex)
+{
+        struct hostent *he = NULL;
+        struct in_addr **addr_list = NULL;
+        char cmd[100] = {'\0'};
+        int i = 0;
+        char *host , *tmp;
+        host = tmp = safe_strdup(hoststr);
+        /* Get host name only*/
+        if(strstr(host, "http://"))
+                host = host + 7;
+        else if(strstr(host, "https://"))
+                host = host + 8;
+        while(host[i]) {
+                if ((host[i] == '/') || (host[i] ==':')) {
+                        host[i] = '\0';
+                        break;
+                }
+                i++;
+        }
+        debug(LOG_NOTICE,"Getting addresses for host %s", host);
+        if ( (he = gethostbyname(host) ) == NULL) {
+        free(tmp);
+                return;
+        }
+        addr_list = (struct in_addr **) he->h_addr_list;
+        for(i = 0; addr_list[i] != NULL; i++) {
+                sprintf(cmd, "echo \"%u\" > /proc/sys/net/bridge/bridge-http-redirect-add-ip", htonl(addr_list[i]->s_addr));
+                debug(LOG_NOTICE,"Adding host %s with ip %s",host,inet_ntoa(*addr_list[i]));
+                system(cmd);
+        }
+    free(tmp);
+}
+
+void notify_client_connect(char *mac, char *ifname)
+{
+    t_client *client;
+    t_redir_node *node;
+    s_config *config = config_get_config();
+    int ifIndex = get_ifIndex(ifname);
+
+    if( !config->status[ifIndex] ) {
+        debug(LOG_NOTICE, "Captive Portal is not enabled for %s", ifname);
+        return;
+    }
+    LOCK_REDIR();
+    //  config_cp_auth_status(ifname, mac, 1); /* Updating the cpAuthStatus to 1 */
+    node = redir_list_find(mac);
+    if (!node) {
+        node = redir_list_append(mac);
+    }
+    if (!node) {
+        UNLOCK_REDIR();
+        return;
+    }
+    debug(LOG_NOTICE,"%s recv'd association req from mac %s\n",__func__,mac);
+
+    /*post_event(ifname, mac, 1 << 0); *//* BIT0 is set which is a session query notification */
+    node->ifindex = ifIndex;
+    if (ifname) strncpy(node->dev, ifname, sizeof(node->dev));
+    node->cpAuthstatus = 1;
+    node->expiry = time(NULL);
+
+    if (!node->redir_pending) {
+        char command[100];
+        char fmac[13];
+        formatmacaddr(mac, &fmac);
+        node->redir_pending = 1;
+        snprintf(command,100,"echo %s > /proc/sys/net/bridge/bridge-http-redirect-add-mac",fmac);
+        //      printf("%s",command);
+        execute(command,0);
+        fw_mark_mangle(mac,1);
+    }
+    if(config->operate_mode){
+        if((time(NULL) - timekeeper[0].timestamp) > MAX_HOSTNAME_RESOLVE_TIMEOUT){
+            make_proc_entry_for_url(config->portal[0], 0);
+            timekeeper[0].timestamp = time(NULL);
+        }
+    }else{
+        if((time(NULL) - timekeeper[ifIndex].timestamp) > MAX_HOSTNAME_RESOLVE_TIMEOUT){
+            make_proc_entry_for_url(config->portal[ifIndex], ifIndex);
+            timekeeper[ifIndex].timestamp = time(NULL);
+        }
+    }
+    timekeeper[ifIndex].timestamp = time(NULL);
+
+    UNLOCK_REDIR();
+
+    LOCK_CLIENT_LIST();
+
+    client = client_list_find_by_mac(mac);
+    if (client) {
+        /*fw_deny_raw(client->ip, client->mac, client->fw_connection_state);      *//*PRATIK: Commented so that it doesn't invoke the firewall*/
+    iptables_fw_access(FW_ACCESS_DENY, client->ip, client->mac, client->fw_connection_state);    
+    client_list_delete(client);
+    }
+
+    UNLOCK_CLIENT_LIST();
+}
+void notify_client_disconnect(char *mac, char *ifname)
+{
+    t_client *client;
+    t_redir_node *node;
+    int ifIndex = get_ifIndex(ifname);
+    //     printf("Client Disconnected\n");
+    LOCK_REDIR();
+
+    node = redir_list_find(mac);
+
+    if(node)
+        if(node->ifindex != ifIndex)
+            debug(LOG_NOTICE,"%s: %s connected to idx %d, recv'd disconnect evt from idx %d\n",__func__, mac, node->ifindex, ifIndex);
+
+    if (node && (node->ifindex == ifIndex)) {
+        if (node->redir_pending) {
+            char command[100];
+            char fmac[13];
+            formatmacaddr(mac, &fmac);
+            node->redir_pending = 0;
+            debug(LOG_NOTICE,"%s: recv'd disconnect evt for %s from idx %d\n",__func__, mac, node->ifindex);
+            snprintf(command,100,"echo %s > /proc/sys/net/bridge/bridge-http-redirect-del-mac",fmac);
+            //      printf("%s",command);
+            execute(command,0);
+            if (node->route_added) {
+                memset(command, 0, sizeof(command));
+                sprintf(command, "/bin/ip route del %s/32 src %s dev %s", node->host_ip, node->dev_ip, node->dev);
+                //printf("\nexecuting %s\n", command);
+                execute(command, 0);
+            }
+            fw_mark_mangle(mac,0);
+        }
+        redir_list_delete(node);
+    }
+
+    UNLOCK_REDIR();
+
+    LOCK_CLIENT_LIST();
+    client = client_list_find_by_mac(mac);
+    if (client) {
+        /*fw_deny_raw(client->ip, client->mac, client->fw_connection_state);*/
+        iptables_fw_access(FW_ACCESS_DENY, client->ip, client->mac, client->fw_connection_state);
+        client_list_delete(client);
+    }
+    UNLOCK_CLIENT_LIST();
+}
 
 /** The 404 handler is also responsible for redirecting to the auth server */
 void

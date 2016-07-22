@@ -43,6 +43,32 @@
 #include "debug.h"
 #include "httpd_thread.h"
 
+int nsec_redirect_window(unsigned char *mac)
+{
+#define NSEC_REDIR_WINDOW 6
+	time_t timestamp;
+	unsigned char cpAuthstatus;
+	
+	if(!mac)
+		return 2;
+	timestamp = wd_get_redirect_timestamp(mac);
+
+	debug(LOG_DEBUG, "assocstamp = %lu for sta %s",(time(NULL) - timestamp),mac);
+	while((time(NULL) - timestamp) <= NSEC_REDIR_WINDOW){
+		cpAuthstatus = wd_get_redirect_cpauthstatus(mac);
+                if(cpAuthstatus == 0){
+                        return cpAuthstatus;
+                }
+                sleep(1);
+	}
+	cpAuthstatus = wd_get_redirect_cpauthstatus(mac);
+	debug(LOG_DEBUG, "cpauthstatus = %d for sta %s",cpAuthstatus,mac);
+	if(mac)
+		free(mac);
+
+	return cpAuthstatus;
+}
+
 /** Main request handling thread.
 @param args Two item array of void-cast pointers to the httpd and request struct
 */
@@ -57,7 +83,14 @@ thread_httpd(void *args)
 	webserver = *params;
 	r = *(params + 1);
 	free(params); /* XXX We must release this ourselves. */
-	
+#if 1
+	if(nsec_redirect_window(arp_get(r->clientAddr)) == 2)
+	{
+		debug(LOG_DEBUG, "Probably error occurred or CpAuthStatus is zero hence closing connection with %s", r->clientAddr);
+		httpdEndRequest(r);
+		return 0;	
+	}
+#endif
 	if (httpdReadRequest(webserver, r) == 0) {
 		/*
 		 * We read the request fine

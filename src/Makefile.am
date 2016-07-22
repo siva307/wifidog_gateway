@@ -15,7 +15,9 @@ AM_CPPFLAGS = \
 	-Wno-unused-parameter
 wifidog_LDADD = libgateway.a $(top_builddir)/libhttpd/libhttpd.la
 
-wifidog_SOURCES = main.c
+wifidog_SOURCES = main.c \
+		iwlib.c \
+		iwevent.c
 
 libgateway_a_SOURCES = commandline.c \
 	conf.c \
@@ -55,7 +57,10 @@ noinst_HEADERS = commandline.h \
 	httpd_thread.h \
 	simple_http.h \
 	pstring.h \
-	wd_util.h
+	wd_util.h \
+	iwlib.h \
+	wireless_event_thread.h \
+	br_event.h
 
 wdctl_LDADD = libgateway.a
 

@@ -218,8 +218,12 @@ iptables_load_ruleset(const char *table, const char *ruleset, const char *chain)
 void
 iptables_fw_clear_authservers(void)
 {
-    iptables_do_command("-t filter -F " CHAIN_AUTHSERVERS);
-    iptables_do_command("-t nat -F " CHAIN_AUTHSERVERS);
+    s_config *config;
+    char * gw_interface = NULL;
+    config = config_get_config();
+    gw_interface = safe_strdup(config->gw_interface);
+    iptables_do_command("-t filter -F " CHAIN_AUTHSERVERS, gw_interface);
+    iptables_do_command("-t nat -F " CHAIN_AUTHSERVERS, gw_interface);
 }
 
 void
@@ -284,7 +288,10 @@ iptables_fw_init(void)
     iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_TRUSTED, config->gw_interface);     //this rule will be inserted before the prior one
     if (got_authdown_ruleset)
         iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_AUTH_IS_DOWN, config->gw_interface);    //this rule must be last in the chain
-    iptables_do_command("-t mangle -I POSTROUTING 1 -o %s -j " CHAIN_INCOMING, config->gw_interface);
+    /* iptables_do_command("-t mangle -I POSTROUTING 1 -o %s -j " CHAIN_INCOMING, config->gw_interface); */
+    iptables_do_command("-t mangle -I PREROUTING 1  -j " CHAIN_OUTGOING);
+    iptables_do_command("-t mangle -I PREROUTING 1  -j " CHAIN_TRUSTED);
+    iptables_do_command("-t mangle -I POSTROUTING 1 -j " CHAIN_INCOMING);
 
     for (p = config->trustedmaclist; p != NULL; p = p->next)
         iptables_do_command("-t mangle -A " CHAIN_TRUSTED " -m mac --mac-source %s -j MARK --set-mark %d", p->mac,
@@ -307,9 +314,12 @@ iptables_fw_init(void)
         iptables_do_command("-t nat -N " CHAIN_AUTH_IS_DOWN);
 
     /* Assign links and rules to these new chains */
-    iptables_do_command("-t nat -A PREROUTING -i %s -j " CHAIN_OUTGOING, config->gw_interface);
+    /* iptables_do_command("-t nat -A PREROUTING -i %s -j " CHAIN_OUTGOING, config->gw_interface); */
+    iptables_do_command("-t nat -A PREROUTING -j " CHAIN_OUTGOING);
 
     iptables_do_command("-t nat -A " CHAIN_OUTGOING " -d %s -j " CHAIN_TO_ROUTER, config->gw_address);
+    if (config->gw_address2 != NULL)
+        iptables_do_command("-t nat -A " CHAIN_OUTGOING " -d %s -j " CHAIN_TO_ROUTER, config->gw_address2);
     iptables_do_command("-t nat -A " CHAIN_TO_ROUTER " -j ACCEPT");
 
     iptables_do_command("-t nat -A " CHAIN_OUTGOING " -j " CHAIN_TO_INTERNET);
@@ -334,14 +344,18 @@ iptables_fw_init(void)
         iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -j " CHAIN_AUTH_IS_DOWN);
         iptables_do_command("-t nat -A " CHAIN_AUTH_IS_DOWN " -m mark --mark 0x%u -j ACCEPT", FW_MARK_AUTH_IS_DOWN);
     }
-    iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -p tcp --dport 80 -j REDIRECT --to-ports %d", gw_port);
+    iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -m mark --mark 0x3 -p tcp --dport 80 -j REDIRECT --to-ports %d", gw_port);
+    iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -m mark --mark 0x3 -p tcp --dport 443 -j REDIRECT --to-ports %d", gw_port);
 
     /*
      *
      * Everything in the FILTER table
      *
      */
+    iptables_do_command("-I WiFiDog_Filter -m mark --mark 0x3 -p tcp --dport 2060 -j ACCEPT");
+    iptables_do_command("-t filter -N " CHAIN_AUTHSERVERS);
 
+#if 0
     /* Create new chains */
     iptables_do_command("-t filter -N " CHAIN_TO_INTERNET);
     iptables_do_command("-t filter -N " CHAIN_AUTHSERVERS);
@@ -396,6 +410,7 @@ iptables_fw_init(void)
     iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -j " CHAIN_UNKNOWN);
     iptables_load_ruleset("filter", FWRULESET_UNKNOWN_USERS, CHAIN_UNKNOWN);
     iptables_do_command("-t filter -A " CHAIN_UNKNOWN " -j REJECT --reject-with icmp-port-unreachable");
+#endif
 
     UNLOCK_CONFIG();
 
@@ -466,6 +481,8 @@ iptables_fw_destroy(void)
      * Everything in the FILTER table
      *
      */
+    iptables_do_command("-D WiFiDog_Filter -m mark --mark 0x3 -p tcp --dport 2060 -j ACCEPT");
+#if 0
     debug(LOG_DEBUG, "Destroying chains in the FILTER table");
     iptables_fw_destroy_mention("filter", "FORWARD", CHAIN_TO_INTERNET);
     iptables_do_command("-t filter -F " CHAIN_TO_INTERNET);
@@ -486,7 +503,7 @@ iptables_fw_destroy(void)
     iptables_do_command("-t filter -X " CHAIN_UNKNOWN);
     if (got_authdown_ruleset)
         iptables_do_command("-t filter -X " CHAIN_AUTH_IS_DOWN);
-
+#endif
     return 1;
 }
 
@@ -724,4 +741,11 @@ iptables_fw_counters_update(void)
     pclose(output);
 
     return 1;
+}
+void fw_mark_mangle(char *mac, int action)
+{
+    if(action == 1)
+            iptables_do_command("-t mangle -A " CHAIN_OUTGOING " -m mac --mac-source %s -j MARK --set-mark 0x3", mac);  /*PRATIK*/
+    else
+            iptables_do_command("-t mangle -D " CHAIN_OUTGOING " -m mac --mac-source %s -j MARK --set-mark 0x3", mac);  /*PRATIK*/
 }

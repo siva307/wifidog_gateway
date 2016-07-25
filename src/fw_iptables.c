@@ -646,7 +646,7 @@ int
 iptables_fw_counters_update(void)
 {
     FILE *output;
-    char *script, ip[16], rc;
+    char *script, ip[16], rc, mac[18];
     unsigned long long int counter;
     t_client *p1;
     struct in_addr tempaddr;
@@ -665,31 +665,33 @@ iptables_fw_counters_update(void)
     while (('\n' != fgetc(output)) && !feof(output)) ;
     while (('\n' != fgetc(output)) && !feof(output)) ;
     while (output && !(feof(output))) {
-        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);
+//3554   390634 MARK       all  --  *      *       0.0.0.0/0            0.0.0.0/0            MAC C0:38:96:96:74:7D MARK set 0x3
+        /*rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);*/
         //rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s 0x%*u", &counter, ip);
+        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %17[0-9a-fA-F:] %*s 0x%*u", &counter, ip, mac);
         if (2 == rc && EOF != rc) {
             /* Sanity */
             if (!inet_aton(ip, &tempaddr)) {
                 debug(LOG_WARNING, "I was supposed to read an IP address but instead got [%s] - ignoring it", ip);
                 continue;
             }
-            debug(LOG_DEBUG, "Read outgoing traffic for %s: Bytes=%llu", ip, counter);
+            debug(LOG_DEBUG, "Read outgoing traffic for %s(%s): Bytes=%llu", ip, mac, counter);
             LOCK_CLIENT_LIST();
-            if ((p1 = client_list_find_by_ip(ip))) {
+            if ((p1 = client_list_find_by_mac(mac))) {
                 if ((p1->counters.outgoing - p1->counters.outgoing_history) < counter) {
                     p1->counters.outgoing_delta = p1->counters.outgoing_history + counter - p1->counters.outgoing;
                     p1->counters.outgoing = p1->counters.outgoing_history + counter;
                     p1->counters.last_updated = time(NULL);
-                    debug(LOG_DEBUG, "%s - Outgoing traffic %llu bytes, updated counter.outgoing to %llu bytes.  Updated last_updated to %d", ip,
+                    debug(LOG_DEBUG, "%s(%s) - Outgoing traffic %llu bytes, updated counter.outgoing to %llu bytes.  Updated last_updated to %d", ip, mac,
                           counter, p1->counters.outgoing, p1->counters.last_updated);
                 }
             } else {
                 debug(LOG_ERR,
-                      "iptables_fw_counters_update(): Could not find %s in client list, this should not happen unless if the gateway crashed",
-                      ip);
-                debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_OUTGOING);
+                      "iptables_fw_counters_update(): Could not find %s(%s) in client list, this should not happen unless if the gateway crashed",
+                      ip, mac);
+                debug(LOG_ERR, "Preventively deleting firewall rules for %s(%s) in table %s", ip, mac, CHAIN_OUTGOING);
                 iptables_fw_destroy_mention("mangle", CHAIN_OUTGOING, ip);
-                debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_INCOMING);
+                debug(LOG_ERR, "Preventively deleting firewall rules for %s(%s) in table %s", ip, mac, CHAIN_INCOMING);
                 iptables_fw_destroy_mention("mangle", CHAIN_INCOMING, ip);
             }
             UNLOCK_CLIENT_LIST();

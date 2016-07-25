@@ -159,7 +159,6 @@ unsigned char wd_get_redirect_cpauthstatus(unsigned char *mac)
 t_redir_node *redir_list_append(char *mac)
 {
     t_redir_node *curnode, *prevnode;
-
     prevnode = NULL;
     curnode = first_redir_node;
 
@@ -369,7 +368,7 @@ void notify_client_connect(char *mac, char *ifname)
         UNLOCK_REDIR();
         return;
     }
-    debug(LOG_NOTICE,"%s recv'd association req from mac %s\n",__func__,mac);
+    debug(LOG_NOTICE,"%s recv'd association req from mac %s  %p\n",__func__,mac, node);
 
     /*post_event(ifname, mac, 1 << 0); *//* BIT0 is set which is a session query notification */
     node->ifindex = ifIndex;
@@ -445,6 +444,7 @@ void notify_client_disconnect(char *mac, char *ifname)
             }
             fw_mark_mangle(mac,0);
         }
+        debug(LOG_NOTICE,"%s: removing node list for %s from idx %d\n",__func__, mac, node->ifindex);
         redir_list_delete(node);
     }
 

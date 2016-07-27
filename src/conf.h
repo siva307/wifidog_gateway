@@ -184,6 +184,7 @@ typedef struct {
     int operate_mode;
     char *portal[16];
     int   status[16];
+	int  profile[8];
     char *portal_last_ip;
 
     char *httpdrealm;           /**< @brief HTTP Authentication realm */

@@ -102,6 +102,14 @@ typedef enum {
     oStatus5,
     oStatus6,
     oStatus7,
+	oProfile0,
+	oProfile1,
+	oProfile2,
+	oProfile3,
+	oProfile4,
+	oProfile5,
+	oProfile6,
+	oProfile7,
     oHTTPDMaxConn,
     oHTTPDName,
     oHTTPDRealm,
@@ -184,8 +192,16 @@ static const struct {
     { "status4",            oStatus4 },
     { "status5",            oStatus5 },
     { "status6",            oStatus6 },
-    { "status7",            oStatus7 }, {
-NULL, oBadOption},};
+    { "status7",            oStatus7 },
+    { "profile0",           oProfile0 },
+    { "profile1",           oProfile1 },
+    { "profile2",           oProfile2 },
+    { "profile3",           oProfile3 },
+    { "profile4",           oProfile4 },
+    { "profile5",           oProfile5 },
+    { "profile6",           oProfile6 },
+    { "profile7",           oProfile7 },
+	{NULL, oBadOption},};
 
 static void config_notnull(const void *, const char *);
 static int parse_boolean_value(char *);
@@ -810,6 +826,30 @@ config_read(const char *filename)
                 case oStatus7:
                     sscanf(p1, "%d", &config.status[7]);
                     break;
+				case oProfile0:
+                    sscanf(p1, "%d", &config.profile[0]);
+					break;
+				case oProfile1:
+                    sscanf(p1, "%d", &config.profile[1]);
+					break;
+				case oProfile2:
+                    sscanf(p1, "%d", &config.profile[2]);
+					break;
+				case oProfile3:
+                    sscanf(p1, "%d", &config.profile[3]);
+					break;
+				case oProfile4:
+                    sscanf(p1, "%d", &config.profile[4]);
+					break;
+				case oProfile5:
+                    sscanf(p1, "%d", &config.profile[5]);
+					break;
+				case oProfile6:
+                    sscanf(p1, "%d", &config.profile[6]);
+					break;
+				case oProfile7:
+                    sscanf(p1, "%d", &config.profile[7]);
+					break;
                 case oGatewayPort:
                     sscanf(p1, "%d", &config.gw_port);
                     break;

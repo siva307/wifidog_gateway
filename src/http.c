@@ -465,6 +465,8 @@ void
 http_callback_404(httpd * webserver, request * r, int error_code)
 {
     char tmp_url[MAX_BUF], *url, *mac;
+	int index = 0;
+	t_redir_node *node;
     s_config *config = config_get_config();
     t_auth_serv *auth_server = get_auth_server();
 
@@ -517,9 +519,13 @@ http_callback_404(httpd * webserver, request * r, int error_code)
                           config->gw_id, r->clientAddr, url);
         } else {
             debug(LOG_INFO, "Got client MAC address for ip %s: %s", r->clientAddr, mac);
-            safe_asprintf(&urlFragment, "%sgw_address=%s&gw_port=%d&gw_id=%s&ip=%s&mac=%s&url=%s",
+			node = redir_list_find(mac);
+			if (node) {
+				index = node->ifindex; 
+			}
+            safe_asprintf(&urlFragment, "%sgw_address=%s&gw_port=%d&gw_id=%s&ip=%s&mac=%s&url=%s&wlanindex=%d",
                           auth_server->authserv_login_script_path_fragment,
-                          config->gw_address, config->gw_port, config->gw_id, r->clientAddr, mac, url);
+                          config->gw_address, config->gw_port, config->gw_id, r->clientAddr, mac, url,index);
             free(mac);
         }
 

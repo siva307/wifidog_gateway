@@ -83,14 +83,12 @@ thread_httpd(void *args)
 	webserver = *params;
 	r = *(params + 1);
 	free(params); /* XXX We must release this ourselves. */
-#if 0
 	if(nsec_redirect_window(arp_get(r->clientAddr)) == 2)
 	{
 		debug(LOG_DEBUG, "Probably error occurred or CpAuthStatus is zero hence closing connection with %s", r->clientAddr);
 		httpdEndRequest(r);
 		return 0;	
 	}
-#endif
 	if (httpdReadRequest(webserver, r) == 0) {
 		/*
 		 * We read the request fine

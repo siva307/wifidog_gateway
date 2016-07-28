@@ -116,7 +116,7 @@ redir_list_find(char *mac)
 
     ptr = first_redir_node;
     while (NULL != ptr) {
-        if (!strcmp(ptr->mac, mac))
+        if (!strcasecmp(ptr->mac, mac))
             return ptr;
         ptr = ptr->next;
     }
@@ -518,7 +518,7 @@ http_callback_404(httpd * webserver, request * r, int error_code)
                           auth_server->authserv_login_script_path_fragment, config->gw_address, config->gw_port,
                           config->gw_id, r->clientAddr, url);
         } else {
-            debug(LOG_INFO, "Got client MAC address for ip %s: %s", r->clientAddr, mac);
+            debug(LOG_INFO, "Got client MAC address for ip %s: %s", r->clientAddr, mac);	
 			node = redir_list_find(mac);
 			if (node) {
 				index = node->ifindex; 

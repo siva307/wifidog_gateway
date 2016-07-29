@@ -23,7 +23,8 @@
 
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
-#include<linux/if_bridge.h>
+#include <linux/if_bridge.h>
+#include <linux/if_link.h>
 
 #include <getopt.h>
 #include <time.h>
@@ -35,11 +36,11 @@
 
 /* Ugly backward compatibility :-( */
 #ifndef IFLA_WIRELESS
-#define IFLA_WIRELESS	(IFLA_MASTER + 1)
+#error "IFLA_WIRELESS is not defined"
 #endif /* IFLA_WIRELESS */
 
 #ifndef IFLA_HTTPREDIR
-#define IFLA_HTTPREDIR  (IFLA_MASTER + 9)
+#error "IFLA_HTTPREDIR is not defined"
 #endif /* IFLA_HTTPREDIR */
 
 #if 0 /* Old Atheroes driver macros */

@@ -826,30 +826,30 @@ config_read(const char *filename)
                 case oStatus7:
                     sscanf(p1, "%d", &config.status[7]);
                     break;
-				case oProfile0:
-                    sscanf(p1, "%d", &config.profile[0]);
-					break;
-				case oProfile1:
-                    sscanf(p1, "%d", &config.profile[1]);
-					break;
-				case oProfile2:
-                    sscanf(p1, "%d", &config.profile[2]);
-					break;
-				case oProfile3:
-                    sscanf(p1, "%d", &config.profile[3]);
-					break;
-				case oProfile4:
-                    sscanf(p1, "%d", &config.profile[4]);
-					break;
-				case oProfile5:
-                    sscanf(p1, "%d", &config.profile[5]);
-					break;
-				case oProfile6:
-                    sscanf(p1, "%d", &config.profile[6]);
-					break;
-				case oProfile7:
-                    sscanf(p1, "%d", &config.profile[7]);
-					break;
+		case oProfile0:
+		    sscanf(p1, "%d", &config.profile[0]);
+		    break;
+		case oProfile1:
+		    sscanf(p1, "%d", &config.profile[1]);
+		    break;
+		case oProfile2:
+		    sscanf(p1, "%d", &config.profile[2]);
+		    break;
+		case oProfile3:
+		    sscanf(p1, "%d", &config.profile[3]);
+		    break;
+		case oProfile4:
+		    sscanf(p1, "%d", &config.profile[4]);
+		    break;
+		case oProfile5:
+		    sscanf(p1, "%d", &config.profile[5]);
+		    break;
+		case oProfile6:
+		    sscanf(p1, "%d", &config.profile[6]);
+		    break;
+		case oProfile7:
+		    sscanf(p1, "%d", &config.profile[7]);
+		    break;
                 case oGatewayPort:
                     sscanf(p1, "%d", &config.gw_port);
                     break;

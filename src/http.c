@@ -86,6 +86,7 @@ typedef struct __t_redir_node {
     char dev_ip[32];
     time_t expiry;
     int ifindex;
+    int wlindex;
     unsigned char cpAuthstatus;
 } t_redir_node;
 
@@ -267,7 +268,7 @@ void notify_add_route(struct brreq *brreq, char *mac)
             strcpy(node->dev_ip, tmp_ptr);
         /* Set the host route */
         memset(cmd, 0, sizeof(cmd));
-        sprintf(cmd, "/bin/ip route add %s/32 src %s dev %s", node->host_ip, node->dev_ip, node->dev);
+        sprintf(cmd, "/sbin/ip route add %s/32 src %s dev %s", node->host_ip, node->dev_ip, node->dev);
         //printf("\nexecuting %s\n", cmd);
         execute(cmd, 0);
         node->route_added = 1;
@@ -369,9 +370,10 @@ void notify_client_connect(char *mac, char *ifname)
         return;
     }
     debug(LOG_NOTICE,"%s recv'd association req from mac %s  %p\n",__func__,mac, node);
-
+    
     /*post_event(ifname, mac, 1 << 0); *//* BIT0 is set which is a session query notification */
     node->ifindex = ifIndex;
+    node->wlindex = config->profile[ifIndex];
     if (ifname) strncpy(node->dev, ifname, sizeof(node->dev));
     node->cpAuthstatus = 1;
     node->expiry = time(NULL);
@@ -465,8 +467,8 @@ void
 http_callback_404(httpd * webserver, request * r, int error_code)
 {
     char tmp_url[MAX_BUF], *url, *mac;
-	int index = 0;
-	t_redir_node *node;
+    int index = 0;
+    t_redir_node *node;
     s_config *config = config_get_config();
     t_auth_serv *auth_server = get_auth_server();
 
@@ -519,13 +521,13 @@ http_callback_404(httpd * webserver, request * r, int error_code)
                           config->gw_id, r->clientAddr, url);
         } else {
             debug(LOG_INFO, "Got client MAC address for ip %s: %s", r->clientAddr, mac);	
-			node = redir_list_find(mac);
-			if (node) {
-				index = node->ifindex; 
-			}
+	    node = redir_list_find(mac);
+	    if (node) {
+		index = node->wlindex; 
+	    }
             safe_asprintf(&urlFragment, "%sgw_address=%s&gw_port=%d&gw_id=%s&ip=%s&mac=%s&url=%s&wlanindex=%d",
                           auth_server->authserv_login_script_path_fragment,
-                          config->gw_address, config->gw_port, config->gw_id, r->clientAddr, mac, url,index);
+                          config->gw_address, config->gw_port, config->gw_id, r->clientAddr, mac, url, index);
             free(mac);
         }
 

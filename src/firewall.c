@@ -74,7 +74,7 @@ fw_allow(t_client * client, int new_fw_connection_state)
     int result;
     int old_state = client->fw_connection_state;
 
-    debug(LOG_DEBUG, "Allowing %s %s with fw_connection_state %d", client->ip, client->mac, new_fw_connection_state);
+    debug(LOG_DEBUG, "Allowing %s %s with fw_connection_state %d->%d", client->ip, client->mac, old_state, new_fw_connection_state);
     client->fw_connection_state = new_fw_connection_state;
 
     /* Grant first */
@@ -83,7 +83,11 @@ fw_allow(t_client * client, int new_fw_connection_state)
     /* Deny after if needed. */
     if (old_state != FW_MARK_NONE) {
         debug(LOG_DEBUG, "Clearing previous fw_connection_state %d", old_state);
-        _fw_deny_raw(client->ip, client->mac, old_state);
+	if (old_state == FW_MARK_REDIR) {
+	    fw_mark_mangle(client->mac, 0);
+	} else {
+	    _fw_deny_raw(client->ip, client->mac, old_state);
+	}
     }
 
     return result;

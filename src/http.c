@@ -679,7 +679,8 @@ http_callback_auth(httpd * webserver, request * r)
 
             if ((client = client_list_find(r->clientAddr, mac)) == NULL) {
                 debug(LOG_DEBUG, "New client for %s", r->clientAddr);
-                client_list_add(r->clientAddr, mac, token->value);
+                client = client_list_add(r->clientAddr, mac, token->value);
+		client->fw_connection_state = FW_MARK_REDIR;
             } else if (logout) {
                 logout_client(client);
             } else {

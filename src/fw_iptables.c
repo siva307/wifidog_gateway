@@ -668,7 +668,7 @@ iptables_fw_counters_update(void)
 //3554   390634 MARK       all  --  *      *       0.0.0.0/0            0.0.0.0/0            MAC C0:38:96:96:74:7D MARK set 0x3
         /*rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);*/
         //rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s 0x%*u", &counter, ip);
-        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %17[0-9a-fA-F:] %*s 0x%*u", &counter, ip, mac);
+        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %17[0-9a-fA-F:] %*s %*s 0x%*u", &counter, ip, mac);
         if (2 == rc && EOF != rc) {
             /* Sanity */
             if (!inet_aton(ip, &tempaddr)) {

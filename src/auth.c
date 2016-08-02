@@ -219,14 +219,9 @@ authenticate_client(request * r)
     case AUTH_ALLOWED:
     {
         /* Logged in successfully as a regular account */
-	char command[100];
-	char fmac[13];
         debug(LOG_INFO, "Got ALLOWED from central server authenticating token %s from %s at %s - "
               "adding to firewall and redirecting them to portal", client->token, client->ip, client->mac);
         fw_allow(client, FW_MARK_KNOWN);
-	formatmacaddr(client->mac, &fmac);
-        snprintf(command,100,"echo %s > /proc/sys/net/bridge/bridge-http-redirect-del-mac",fmac);
-        execute(command,0);
         served_this_session++;
         safe_asprintf(&urlFragment, "%sgw_id=%s", auth_server->authserv_portal_script_path_fragment, config->gw_id);
         http_send_redirect_to_auth(r, urlFragment, "Redirect to portal");

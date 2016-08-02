@@ -84,6 +84,11 @@ fw_allow(t_client * client, int new_fw_connection_state)
     if (old_state != FW_MARK_NONE) {
         debug(LOG_DEBUG, "Clearing previous fw_connection_state %d", old_state);
 	if (old_state == FW_MARK_REDIR) {
+	    char command[100];
+	    char fmac[13];
+	    formatmacaddr(client->mac, &fmac);
+	    snprintf(command,100,"echo %s > /proc/sys/net/bridge/bridge-http-redirect-del-mac",fmac);
+	    execute(command,0);
 	    fw_mark_mangle(client->mac, 0);
 	} else {
 	    _fw_deny_raw(client->ip, client->mac, old_state);
@@ -119,6 +124,14 @@ fw_deny(t_client * client)
     int fw_connection_state = client->fw_connection_state;
     debug(LOG_DEBUG, "Denying %s %s with fw_connection_state %d", client->ip, client->mac, client->fw_connection_state);
 
+    if (client->fw_connection_state != FW_MARK_REDIR) {
+	char command[100];
+	char fmac[13];
+	fw_mark_mangle(client->mac, 1);
+	formatmacaddr(client->mac, &fmac);
+        snprintf(command,100,"echo %s > /proc/sys/net/bridge/bridge-http-redirect-add-mac",fmac);
+        execute(command,0);
+    }
     client->fw_connection_state = FW_MARK_NONE; /* Clear */
     return _fw_deny_raw(client->ip, client->mac, fw_connection_state);
 }

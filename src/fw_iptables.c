@@ -100,7 +100,7 @@ iptables_do_command(const char *format, ...)
     safe_vasprintf(&fmt_cmd, format, vlist);
     va_end(vlist);
 
-    safe_asprintf(&cmd, "iptables %s", fmt_cmd);
+    safe_asprintf(&cmd, "iptables -w %s", fmt_cmd);
     free(fmt_cmd);
 
     iptables_insert_gateway_id(&cmd);

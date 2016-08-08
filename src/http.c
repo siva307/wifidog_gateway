@@ -427,7 +427,7 @@ void notify_client_disconnect(char *mac, char *ifname)
     LOCK_REDIR();
 
     node = redir_list_find(mac);
-    if (node->redir_pending) {
+    if (node && node->redir_pending) {
         UNLOCK_REDIR();
         safe_asprintf(&script, "%s %s", "iptables", "-v -n -x -t mangle -L " CHAIN_OUTGOING);
         iptables_insert_gateway_id(&script);

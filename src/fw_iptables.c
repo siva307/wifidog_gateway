@@ -352,7 +352,7 @@ iptables_fw_init(void)
      * Everything in the FILTER table
      *
      */
-    iptables_do_command("-I WiFiDog_Filter -m mark --mark 0x3 -p tcp --dport 2060 -j ACCEPT");
+    /*iptables_do_command("-I WiFiDog_Filter -m mark --mark 0x3 -p tcp --dport 2060 -j ACCEPT");*/
     iptables_do_command("-t filter -N " CHAIN_AUTHSERVERS);
 
 #if 0
@@ -481,7 +481,7 @@ iptables_fw_destroy(void)
      * Everything in the FILTER table
      *
      */
-    iptables_do_command("-D WiFiDog_Filter -m mark --mark 0x3 -p tcp --dport 2060 -j ACCEPT");
+    /*iptables_do_command("-D WiFiDog_Filter -m mark --mark 0x3 -p tcp --dport 2060 -j ACCEPT");*/
 #if 0
     debug(LOG_DEBUG, "Destroying chains in the FILTER table");
     iptables_fw_destroy_mention("filter", "FORWARD", CHAIN_TO_INTERNET);

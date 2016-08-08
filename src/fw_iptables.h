@@ -82,4 +82,7 @@ int iptables_fw_auth_reachable(void);
 /** @brief All counters in the client list */
 int iptables_fw_counters_update(void);
 
+
+void iptables_insert_gateway_id(char **input);
+
 #endif                          /* _IPTABLES_H_ */

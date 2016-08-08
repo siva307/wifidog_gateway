@@ -418,11 +418,51 @@ void notify_client_disconnect(char *mac, char *ifname)
 {
     t_client *client;
     t_redir_node *node;
+    FILE *output;
+    char *script, ip[16], rc;
+    unsigned long long int counter;
+    struct in_addr tempaddr;
     int ifIndex = get_ifIndex(ifname);
     //     printf("Client Disconnected\n");
     LOCK_REDIR();
 
     node = redir_list_find(mac);
+    if (node->redir_pending) {
+        UNLOCK_REDIR();
+        safe_asprintf(&script, "%s %s", "iptables", "-v -n -x -t mangle -L " CHAIN_OUTGOING);
+        iptables_insert_gateway_id(&script);
+        output = popen(script, "r");
+        free(script);
+        if (!output) {
+            debug(LOG_ERR, "popen(): %s", strerror(errno));
+            return -1;
+        }
+
+        /* skip the first two lines */
+        while (('\n' != fgetc(output)) && !feof(output)) ;
+        while (('\n' != fgetc(output)) && !feof(output)) ;
+        while (output && !(feof(output))) {
+            rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %17[0-9a-fA-F:] %*s %*s 0x%*u", &counter, ip, mac);
+            if (3 == rc && EOF != rc) {
+                /* Sanity */
+                if (!inet_aton(ip, &tempaddr)) {
+                    debug(LOG_WARNING, "I was supposed to read an IP address but instead got [%s] - ignoring it", ip);
+                    continue;
+                }
+                debug(LOG_DEBUG, "Read outgoing traffic for %s(%s): Bytes=%llu", ip, mac, counter);
+                LOCK_CLIENT_LIST();
+                if ((client = client_list_find_by_ip(ip))) {
+                    client->counters.outgoing = client->counters.outgoing_history + counter;
+                    client->counters.last_updated = time(NULL);
+                    UNLOCK_CLIENT_LIST();
+                    pclose(output);
+                    return;
+                }
+            }
+        }
+        UNLOCK_CLIENT_LIST();
+        pclose(output);
+    }
 
     if(node)
         if(node->ifindex != ifIndex)

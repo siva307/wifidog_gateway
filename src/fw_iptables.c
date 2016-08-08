@@ -65,7 +65,7 @@ static int fw_quiet = 0;
  *
  * This function must be called with the CONFIG_LOCK held.
  */
-static void
+void
 iptables_insert_gateway_id(char **input)
 {
     char *token;
@@ -669,7 +669,7 @@ iptables_fw_counters_update(void)
         /*rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);*/
         //rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s 0x%*u", &counter, ip);
         rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %17[0-9a-fA-F:] %*s %*s 0x%*u", &counter, ip, mac);
-        if (2 == rc && EOF != rc) {
+        if (3 == rc && EOF != rc) {
             /* Sanity */
             if (!inet_aton(ip, &tempaddr)) {
                 debug(LOG_WARNING, "I was supposed to read an IP address but instead got [%s] - ignoring it", ip);
@@ -677,7 +677,7 @@ iptables_fw_counters_update(void)
             }
             debug(LOG_DEBUG, "Read outgoing traffic for %s(%s): Bytes=%llu", ip, mac, counter);
             LOCK_CLIENT_LIST();
-            if ((p1 = client_list_find_by_mac(mac))) {
+            if ((p1 = client_list_find_by_ip(ip))) {
                 if ((p1->counters.outgoing - p1->counters.outgoing_history) < counter) {
                     p1->counters.outgoing_delta = p1->counters.outgoing_history + counter - p1->counters.outgoing;
                     p1->counters.outgoing = p1->counters.outgoing_history + counter;

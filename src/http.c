@@ -561,10 +561,12 @@ http_callback_404(httpd * webserver, request * r, int error_code)
                           config->gw_id, r->clientAddr, url);
         } else {
             debug(LOG_INFO, "Got client MAC address for ip %s: %s", r->clientAddr, mac);	
+	    LOCK_REDIR();
 	    node = redir_list_find(mac);
 	    if (node) {
 		index = node->wlindex; 
 	    }
+	    UNLOCK_REDIR();
             safe_asprintf(&urlFragment, "%sgw_address=%s&gw_port=%d&gw_id=%s&ip=%s&mac=%s&url=%s&wlanindex=%d",
                           auth_server->authserv_login_script_path_fragment,
                           config->gw_address, config->gw_port, config->gw_id, r->clientAddr, mac, url, index);
@@ -706,6 +708,7 @@ http_callback_auth(httpd * webserver, request * r)
     httpVar *token;
     char *mac;
     httpVar *logout = httpdGetVariableByName(r, "logout");
+    const s_config *config = config_get_config();
 
     if ((token = httpdGetVariableByName(r, "token"))) {
         /* They supplied variable "token" */
@@ -714,6 +717,14 @@ http_callback_auth(httpd * webserver, request * r)
             debug(LOG_ERR, "Failed to retrieve MAC address for ip %s", r->clientAddr);
             send_http_page(r, "WiFiDog Error", "Failed to retrieve your MAC address");
         } else {
+	    t_redir_node *node;
+	    int index = 0;
+	    LOCK_REDIR();
+	    node = redir_list_find(mac);
+	    if (node) {
+		index = node->wlindex;
+	    }
+	    UNLOCK_REDIR();
             /* We have their MAC address */
             LOCK_CLIENT_LIST();
 
@@ -721,6 +732,7 @@ http_callback_auth(httpd * webserver, request * r)
                 debug(LOG_DEBUG, "New client for %s", r->clientAddr);
                 client = client_list_add(r->clientAddr, mac, token->value);
 		client->fw_connection_state = FW_MARK_REDIR;
+		client->counters.active_duration = config->sessiontimeout[index];
             } else if (logout) {
                 logout_client(client);
             } else {

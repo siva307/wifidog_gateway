@@ -102,14 +102,22 @@ typedef enum {
     oStatus5,
     oStatus6,
     oStatus7,
-	oProfile0,
-	oProfile1,
-	oProfile2,
-	oProfile3,
-	oProfile4,
-	oProfile5,
-	oProfile6,
-	oProfile7,
+    oProfile0,
+    oProfile1,
+    oProfile2,
+    oProfile3,
+    oProfile4,
+    oProfile5,
+    oProfile6,
+    oProfile7,
+    oSessionTimeout0,
+    oSessionTimeout1,
+    oSessionTimeout2,
+    oSessionTimeout3,
+    oSessionTimeout4,
+    oSessionTimeout5,
+    oSessionTimeout6,
+    oSessionTimeout7,
     oHTTPDMaxConn,
     oHTTPDName,
     oHTTPDRealm,
@@ -201,6 +209,14 @@ static const struct {
     { "profile5",           oProfile5 },
     { "profile6",           oProfile6 },
     { "profile7",           oProfile7 },
+    { "sessiontimeout0",    oSessionTimeout0 },
+    { "sessiontimeout1",    oSessionTimeout1 },
+    { "sessiontimeout2",    oSessionTimeout2 },
+    { "sessiontimeout3",    oSessionTimeout3 },
+    { "sessiontimeout4",    oSessionTimeout4 },
+    { "sessiontimeout5",    oSessionTimeout5 },
+    { "sessiontimeout6",    oSessionTimeout6 },
+    { "sessiontimeout7",    oSessionTimeout7 },
 	{NULL, oBadOption},};
 
 static void config_notnull(const void *, const char *);
@@ -228,6 +244,7 @@ config_get_config(void)
 void
 config_init(void)
 {
+    int i;
     debug(LOG_DEBUG, "Setting default config parameters");
     config.configfile = safe_strdup(DEFAULT_CONFIGFILE);
     config.htmlmsgfile = safe_strdup(DEFAULT_HTMLMSGFILE);
@@ -244,6 +261,9 @@ config_init(void)
     config.httpdpassword = NULL;
     config.clienttimeout = DEFAULT_CLIENTTIMEOUT;
     config.checkinterval = DEFAULT_CHECKINTERVAL;
+    for (i=0; i < 8; i++) {
+	config.sessiontimeout[i] = DEFAULT_SESSIONTIMEOUT;
+    }
     config.portal[0] = NULL;
     config.portal_last_ip = NULL;
     config.daemon = -1;
@@ -849,6 +869,30 @@ config_read(const char *filename)
 		    break;
 		case oProfile7:
 		    sscanf(p1, "%d", &config.profile[7]);
+		    break;
+		case oSessionTimeout0:
+		    sscanf(p1, "%d", &config.sessiontimeout[0]);
+		    break;
+		case oSessionTimeout1:
+		    sscanf(p1, "%d", &config.sessiontimeout[1]);
+		    break;
+		case oSessionTimeout2:
+		    sscanf(p1, "%d", &config.sessiontimeout[2]);
+		    break;
+		case oSessionTimeout3:
+		    sscanf(p1, "%d", &config.sessiontimeout[3]);
+		    break;
+		case oSessionTimeout4:
+		    sscanf(p1, "%d", &config.sessiontimeout[4]);
+		    break;
+		case oSessionTimeout5:
+		    sscanf(p1, "%d", &config.sessiontimeout[5]);
+		    break;
+		case oSessionTimeout6:
+		    sscanf(p1, "%d", &config.sessiontimeout[6]);
+		    break;
+		case oSessionTimeout7:
+		    sscanf(p1, "%d", &config.sessiontimeout[7]);
 		    break;
                 case oGatewayPort:
                     sscanf(p1, "%d", &config.gw_port);

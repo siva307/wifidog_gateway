@@ -310,7 +310,8 @@ fw_sync_with_authserver(void)
               "Checking client %s for timeout:  Last updated %ld (%ld seconds ago), timeout delay %ld seconds, current time %ld, ",
               p1->ip, p1->counters.last_updated, current_time - p1->counters.last_updated,
               config->checkinterval * config->clienttimeout, current_time);
-        if (p1->counters.last_updated + (config->checkinterval * config->clienttimeout) <= current_time) {
+        if ((p1->counters.last_updated + (config->checkinterval * config->clienttimeout) <= current_time) || 
+	     (p1->counters.active_duration <= 0)) {
             /* Timing out user */
             debug(LOG_INFO, "%s - Inactive for more than %ld seconds, removing client and denying in firewall",
                   p1->ip, config->checkinterval * config->clienttimeout);

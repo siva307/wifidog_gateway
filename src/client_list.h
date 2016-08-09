@@ -42,6 +42,7 @@ typedef struct _t_counters {
     unsigned long long incoming_delta;                    /**< @brief Incoming data after last report*/
     unsigned long long outgoing_delta;                    /**< @brief Outgoing data after last report*/
     time_t last_updated;        /**< @brief Last update of the counters */
+    time_t active_duration;     /**< @brief Active duration in mins */
 } t_counters;
 
 /** Client node for the connected client linked list.

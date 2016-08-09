@@ -47,6 +47,7 @@
 /*#define DEFAULT_GATEWAYPORT 0*/
 #define DEFAULT_HTTPDNAME "WiFiDog"
 #define DEFAULT_CLIENTTIMEOUT 5
+#define DEFAULT_SESSIONTIMEOUT 5 /* 60 */
 #define DEFAULT_CHECKINTERVAL 60
 #define DEFAULT_LOG_SYSLOG 0
 #define DEFAULT_SYSLOG_FACILITY LOG_DAEMON
@@ -192,6 +193,8 @@ typedef struct {
     char *httpdpassword;        /**< @brief Password for HTTP authentication */
     int clienttimeout;          /**< @brief How many CheckIntervals before a client
 				     must be re-authenticated */
+    int sessiontimeout[8];      /**< @brief Session time of authenticated clients
+				     in unit of CheckIntervals */
     int checkinterval;          /**< @brief Frequency the the client timeout check
 				     thread will run. */
     int proxy_port;             /**< @brief Transparent proxy port (0 to disable) */

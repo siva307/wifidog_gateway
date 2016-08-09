@@ -650,6 +650,7 @@ iptables_fw_counters_update(void)
     unsigned long long int counter;
     t_client *p1;
     struct in_addr tempaddr;
+    const s_config *config = config_get_config();
 
     /* Look for outgoing traffic */
     safe_asprintf(&script, "%s %s", "iptables", "-v -n -x -t mangle -L " CHAIN_OUTGOING);
@@ -678,6 +679,7 @@ iptables_fw_counters_update(void)
             debug(LOG_DEBUG, "Read outgoing traffic for %s(%s): Bytes=%llu", ip, mac, counter);
             LOCK_CLIENT_LIST();
             if ((p1 = client_list_find_by_ip(ip))) {
+		p1->counters.active_duration--;
                 if ((p1->counters.outgoing - p1->counters.outgoing_history) < counter) {
                     p1->counters.outgoing_delta = p1->counters.outgoing_history + counter - p1->counters.outgoing;
                     p1->counters.outgoing = p1->counters.outgoing_history + counter;

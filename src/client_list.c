@@ -196,6 +196,7 @@ client_dup(const t_client * src)
     new->counters.outgoing_history = src->counters.outgoing_history;
     new->counters.outgoing_delta = src->counters.outgoing_delta;
     new->counters.last_updated = src->counters.last_updated;
+    new->counters.active_duration = src->counters.active_duration;
     new->next = NULL;
 
     return new;

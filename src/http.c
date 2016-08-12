@@ -732,7 +732,7 @@ http_callback_auth(httpd * webserver, request * r)
                 debug(LOG_DEBUG, "New client for %s", r->clientAddr);
                 client = client_list_add(r->clientAddr, mac, token->value);
 		client->fw_connection_state = FW_MARK_REDIR;
-		client->counters.active_duration = config->sessiontimeout[index];
+		client->counters.active_duration = config->sessiontimeout[index-1];
             } else if (logout) {
                 logout_client(client);
             } else {

@@ -254,6 +254,7 @@ config_init(void)
     config.gw_interface = NULL;
     config.gw_address = NULL;
     config.gw_port = DEFAULT_GATEWAYPORT;
+    config.gw_port_ssl = DEFAULT_GATEWAYPORT_SSL;
     config.auth_servers = NULL;
     config.httpdname = NULL;
     config.httpdrealm = DEFAULT_HTTPDNAME;

@@ -17,14 +17,15 @@ wifidog_LDADD = libgateway.a $(top_builddir)/libhttpd/libhttpd.la
 
 wifidog_SOURCES = main.c \
 		iwlib.c \
-		iwevent.c
+		iwevent.c \
+		gateway.c \
+		ssl.c
 
 libgateway_a_SOURCES = commandline.c \
 	conf.c \
 	debug.c \
 	fw_iptables.c \
 	firewall.c \
-	gateway.c \
 	centralserver.c \
 	http.c \
 	auth.c \
@@ -60,7 +61,11 @@ noinst_HEADERS = commandline.h \
 	wd_util.h \
 	iwlib.h \
 	wireless_event_thread.h \
-	br_event.h
+	br_event.h \
+	ssl.h \
+ 	cp_main.h \
+ 	cp_debug.h
+	
 
 wdctl_LDADD = libgateway.a
 

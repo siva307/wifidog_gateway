@@ -148,6 +148,9 @@ extern "C" {
         httpRes response;
         httpVar *variables;
         char readBuf[HTTP_READ_BUF_LEN + 1], *readBufPtr, clientAddr[HTTP_IP_ADDR_LEN];
+#if 1 /* HAVE_SSL */
+	void *ssl_conn;
+#endif
     } request;
 
 /***********************************************************************

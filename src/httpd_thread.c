@@ -36,12 +36,17 @@
 #include <signal.h>
 #include <errno.h>
 
-#include "httpd.h"
+#define HAVE_SSL 1
 
+#include "httpd.h"
+#include "ssl.h"
 #include "../config.h"
 #include "common.h"
 #include "debug.h"
 #include "httpd_thread.h"
+
+
+
 
 int nsec_redirect_window(unsigned char *mac)
 {
@@ -69,6 +74,48 @@ int nsec_redirect_window(unsigned char *mac)
 	return cpAuthstatus;
 }
 
+int handleHttpsRequest(httpd * server, request * r)
+{
+    /* Hardcode to google.com */
+    strcpy(r->request.host,"google.com");
+    strcpy(r->request.path,"/");
+    r->request.query[0] = '\0';
+
+    http_callback_404(server, r, 0);
+}
+
+int httpsReadRequest(httpd * server, request * r)
+{
+    openssl_con *sslcon;
+    char buffer[HTTP_MAX_LEN];
+    int ret;
+
+    sslcon = openssl_accept_fd(initssl(), r->clientSock, 10, NULL);
+    if (sslcon == NULL) {
+	debug(LOG_INFO, "openssl_accept_fd() returned shutdown");
+	return (-1);
+    }
+
+    r->ssl_conn = (void *) sslcon;
+
+    ret = openssl_read(sslcon, buffer, HTTP_MAX_LEN-1, 1);
+    if (ret < 1) {
+	debug (LOG_ERR, "SSL read failed, ret = %d", ret);
+	return ret;
+    }
+    buffer[ret] = '\0';
+
+    handleHttpsRequest(buffer, r);
+
+    close(r->clientSock);
+    if (sslcon) {
+        openssl_shutdown(sslcon, 2);
+        openssl_free(sslcon);
+        sslcon = NULL;
+	r->ssl_conn = NULL;
+    }
+}
+
 /** Main request handling thread.
 @param args Two item array of void-cast pointers to the httpd and request struct
 */
@@ -78,10 +125,12 @@ thread_httpd(void *args)
 	void	**params;
 	httpd	*webserver;
 	request	*r;
+	int is_ssl;
 	
 	params = (void **)args;
 	webserver = *params;
 	r = *(params + 1);
+	is_ssl = *(params + 2);
 	free(params); /* XXX We must release this ourselves. */
 	if(nsec_redirect_window(arp_get(r->clientAddr)) == 2)
 	{
@@ -89,7 +138,22 @@ thread_httpd(void *args)
 		httpdEndRequest(r);
 		return 0;	
 	}
-	if (httpdReadRequest(webserver, r) == 0) {
+
+	if (is_ssl) {
+	    if (httpsReadRequest(webserver, r) == 0) {
+		/*
+		 * We read the request fine
+		 */
+		debug(LOG_DEBUG, "Processing request from %s", r->clientAddr);
+		debug(LOG_DEBUG, "Calling httpsProcessRequest() for %s", r->clientAddr);
+		httpsProcessRequest(webserver, r);
+		debug(LOG_DEBUG, "Returned from httpsProcessRequest() for %s", r->clientAddr);
+	    }
+	    else {
+		debug(LOG_DEBUG, "No valid request received from %s", r->clientAddr);
+	    }
+	} else {
+	    if (httpdReadRequest(webserver, r) == 0) {
 		/*
 		 * We read the request fine
 		 */
@@ -97,10 +161,12 @@ thread_httpd(void *args)
 		debug(LOG_DEBUG, "Calling httpdProcessRequest() for %s", r->clientAddr);
 		httpdProcessRequest(webserver, r);
 		debug(LOG_DEBUG, "Returned from httpdProcessRequest() for %s", r->clientAddr);
-	}
-	else {
+	    }
+	    else {
 		debug(LOG_DEBUG, "No valid request received from %s", r->clientAddr);
+	    }
 	}
+
 	debug(LOG_DEBUG, "Closing connection with %s", r->clientAddr);
 	httpdEndRequest(r);
 }

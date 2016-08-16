@@ -39,11 +39,13 @@
 #define DEFAULT_CONFIGFILE SYSCONFDIR"/wifidog.conf"
 #define DEFAULT_HTMLMSGFILE SYSCONFDIR"/wifidog-msg.html"
 #endif
+#define HAVE_SSL 1 
 #define DEFAULT_DAEMON 1
 #define DEFAULT_DEBUGLEVEL LOG_INFO
 #define DEFAULT_HTTPDMAXCONN 10
 #define DEFAULT_GATEWAYID NULL
 #define DEFAULT_GATEWAYPORT 2060
+#define DEFAULT_GATEWAYPORT_SSL 2061
 /*#define DEFAULT_GATEWAYPORT 0*/
 #define DEFAULT_HTTPDNAME "WiFiDog"
 #define DEFAULT_CLIENTTIMEOUT 5
@@ -176,6 +178,7 @@ typedef struct {
     char *gw_address2;		/**< @brief Temporary secondary IP address for our 
 				     web server */
     int gw_port;                /**< @brief Port the webserver will run on */
+	int gw_port_ssl;
 
     t_auth_serv *auth_servers;  /**< @brief Auth servers list */
     char *httpdname;            /**< @brief Name the web server will return when

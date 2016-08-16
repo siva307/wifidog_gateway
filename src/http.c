@@ -512,6 +512,8 @@ http_callback_404(httpd * webserver, request * r, int error_code)
     s_config *config = config_get_config();
     t_auth_serv *auth_server = get_auth_server();
 
+    int do_ssl = (r->ssl_conn) ? 1 : 0;
+
     memset(tmp_url, 0, sizeof(tmp_url));
     /* 
      * XXX Note the code below assumes that the client's request is a plain
@@ -521,6 +523,11 @@ http_callback_404(httpd * webserver, request * r, int error_code)
     snprintf(tmp_url, (sizeof(tmp_url) - 1), "http://%s%s%s%s",
              r->request.host, r->request.path, r->request.query[0] ? "?" : "", r->request.query);
     url = httpdUrlEncode(tmp_url);
+
+    /* FIXME: Not handling these cases for HTTPS redirection */
+    if (do_ssl && (is_online() || !is_auth_online())) {
+	return;
+    }
 
     if (!is_online()) {
         /* The internet connection is down at the moment  - apologize and do not redirect anywhere */
@@ -797,6 +804,96 @@ http_callback_disconnect(httpd * webserver, request * r)
     return;
 }
 
+#define _https_net_write(conn, buffer, size) openssl_write((openssl_con *)(conn),(buffer),(size),0)
+
+void
+httpsSendHeaders(request * r)
+{
+    char tmpBuf[80], timeBuf[HTTP_TIME_STRING_LEN];
+
+    if (r->response.headersSent)
+        return;
+
+    r->response.headersSent = 1;
+    _https_net_write(r->ssl_conn, "HTTP/1.0 ", 9);
+    _https_net_write(r->ssl_conn, r->response.response, strlen(r->response.response));
+    _https_net_write(r->ssl_conn, r->response.headers, strlen(r->response.headers));
+
+    _httpd_formatTimeString(timeBuf, 0);
+    _https_net_write(r->ssl_conn, "Date: ", 6);
+    _https_net_write(r->ssl_conn, timeBuf, strlen(timeBuf));
+    _https_net_write(r->ssl_conn, "\n", 1);
+
+    _https_net_write(r->ssl_conn, "Connection: close\n", 18);
+    _https_net_write(r->ssl_conn, "Content-Type: ", 14);
+    _https_net_write(r->ssl_conn, r->response.contentType, strlen(r->response.contentType));
+    _https_net_write(r->ssl_conn, "\n", 1);
+
+    if (contentLength > 0) {
+        _https_net_write(r->ssl_conn, "Content-Length: ", 16);
+        snprintf(tmpBuf, sizeof(tmpBuf), "%d", contentLength);
+        _https_net_write(r->ssl_conn, tmpBuf, strlen(tmpBuf));
+        _https_net_write(r->ssl_conn, "\n", 1);
+
+        _httpd_formatTimeString(timeBuf, modTime);
+        _https_net_write(r->ssl_conn, "Last-Modified: ", 15);
+        _https_net_write(r->ssl_conn, timeBuf, strlen(timeBuf));
+        _https_net_write(r->ssl_conn, "\n", 1);
+    }
+    _https_net_write(r->ssl_conn, "\n", 1);
+}
+
+
+void
+httpsOutput(request * r, const char *msg)
+{
+    const char *src;
+    char buf[HTTP_MAX_LEN], varName[80], *dest;
+    int count;
+
+    src = msg;
+    dest = buf;
+    count = 0;
+    memset(buf, 0, HTTP_MAX_LEN);
+    while (*src && count < HTTP_MAX_LEN) {
+        if (*src == '$') {
+            const char *tmp;
+            char *cp;
+            int count2;
+            httpVar *curVar;
+
+            tmp = src + 1;
+            cp = varName;
+            count2 = 0;
+            while (*tmp && (isalnum((unsigned char)*tmp) || *tmp == '_') && count2 < 80) {
+                *cp++ = *tmp++;
+                count2++;
+            }
+            *cp = 0;
+            curVar = httpdGetVariableByName(r, varName);
+            if (curVar && ((count + strlen(curVar->value)) < HTTP_MAX_LEN)) {
+                strcpy(dest, curVar->value);
+                dest = dest + strlen(dest);
+                count += strlen(dest);
+                src = src + strlen(varName) + 1;
+                continue;
+            } else {
+                *dest++ = *src++;
+                count++;
+                continue;
+            }
+        }
+        *dest++ = *src++;
+        count++;
+    }
+    *dest = 0;
+    r->response.responseLength += strlen(buf);
+    if (r->response.headersSent == 0)
+        httpsSendHeaders(r);
+    _https_net_write(r->ssl_conn, buf, strlen(buf));
+}
+
+
 void
 send_http_page(request * r, const char *title, const char *message)
 {
@@ -832,6 +929,10 @@ send_http_page(request * r, const char *title, const char *message)
     httpdAddVariable(r, "title", title);
     httpdAddVariable(r, "message", message);
     httpdAddVariable(r, "nodeID", config->gw_id);
-    httpdOutput(r, buffer);
+    if (r->ssl_conn) {
+	httpsOutput(r, buffer);
+    } else {
+	httpdOutput(r, buffer);
+    }
     free(buffer);
 }

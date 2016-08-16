@@ -345,7 +345,7 @@ iptables_fw_init(void)
         iptables_do_command("-t nat -A " CHAIN_AUTH_IS_DOWN " -m mark --mark 0x%u -j ACCEPT", FW_MARK_AUTH_IS_DOWN);
     }
     iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -m mark --mark 0x3 -p tcp --dport 80 -j REDIRECT --to-ports %d", gw_port);
-    iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -m mark --mark 0x3 -p tcp --dport 443 -j REDIRECT --to-ports %d", gw_port);
+    iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -m mark --mark 0x3 -p tcp --dport 443 -j REDIRECT --to-ports %d", gw_port_ssl);
 
     /*
      *

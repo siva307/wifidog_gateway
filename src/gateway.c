@@ -33,6 +33,12 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+//#include <ndelay.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 /* for strerror() */
 #include <string.h>
@@ -74,6 +80,7 @@ time_t started_time = 0;
 
 /* The internal web server */
 httpd * webserver = NULL;
+httpd * webserver_ssl = 0;
 
 /* Appends -x, the current PID, and NULL to restartargv
  * see parse_commandline in commandline.c for details
@@ -355,6 +362,164 @@ init_signals(void)
 /**@internal
  * Main execution loop 
  */
+
+static int creating_server_to_listen_https(int port_no)
+{
+    struct sockaddr_in serv_addr;
+    socklen_t len = sizeof(serv_addr);
+    int fd, on = 1,ret ;
+    struct linger linger;
+    #define MAX_LISTEN 128
+
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == -1 ) {
+	debug(LOG_ERR,"Failed to create socket,exiting...");
+	exit(1);
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1 ) {
+	debug(LOG_ERR,"Failed to set socket option - SO_REUSEADDR,exiting.");
+	exit(1);
+    }
+
+    linger.l_onoff = 1;
+    linger.l_linger = 0;
+
+    if (setsockopt (fd, SOL_SOCKET, SO_LINGER, (void *)&linger, sizeof(linger)) < 0) {
+	debug(LOG_ERR,"Failed to set socket option - SO_LINGER,exiting.");
+	exit(1);
+    }
+
+    (void) fcntl (fd, F_SETFD, 1);
+	
+    memset(&serv_addr, '\0', sizeof(struct sockaddr_in));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_port = htons(port_no);
+    ret = bind(fd, (struct sockaddr *) &serv_addr , len);
+    if ( ret != 0 ) {
+	debug(LOG_ERR,"Failed to bind ,exiting");
+	exit(1);
+    }
+    if (listen (fd, MAX_LISTEN) < 0) {
+	debug(LOG_ERR,"Failed to listen, exiting");
+	exit(1);
+    }
+
+    return fd;
+}
+
+request * httpsGetConnection(httpd *server, struct timeval *timeout)
+{
+    int result;
+    fd_set fds;
+    struct sockaddr_in addr;
+    socklen_t addrLen;
+    char *ipaddr;
+    request *r;
+
+    server->lastError = 0;
+    FD_ZERO(&fds);
+    FD_SET(server->serverSock, &fds);
+    result = 0;
+    
+    while (result == 0) {
+        result = select(server->serverSock + 1, &fds, 0, 0, timeout);
+        if (result < 0) {
+            server->lastError = -1;
+            return (NULL);
+        }
+        if (timeout != 0 && result == 0) {
+            server->lastError = 0;
+            return (NULL);
+        }
+        if (result > 0) {
+            break;
+        }
+    }    /* Allocate request struct */
+    r = (request *) malloc(sizeof(request));
+    if (r == NULL) {
+        server->lastError = -3;
+        return (NULL);
+    }
+    memset((void *)r, 0, sizeof(request));
+    /* Get on with it */
+    bzero(&addr, sizeof(addr));
+    addrLen = sizeof(addr);
+    r->clientSock = accept(server->serverSock, (struct sockaddr *)&addr, &addrLen);
+#if 0
+    if (ndelay_on(r->clientSock) < 0) {
+        debug(LOG_ERR, "Error setting Non-blocking mode for fd (%d)", r->clientSock);
+    }
+#endif
+   int flags = fcntl(server->serverSock, F_GETFL, 0);
+   fcntl(server->serverSock, F_SETFL, flags | O_NONBLOCK);
+
+    ipaddr = inet_ntoa(addr.sin_addr);
+    if (ipaddr) {
+        strncpy(r->clientAddr, ipaddr, HTTP_IP_ADDR_LEN);
+        r->clientAddr[HTTP_IP_ADDR_LEN - 1] = 0;
+    } else {
+        *r->clientAddr = 0;
+    }
+    r->readBufRemain = 0;
+    r->readBufPtr = NULL;
+    
+    return r;
+}
+
+static void handle_connection_response(httpd *webserver, request *r, int is_ssl)
+{
+    /* We can't convert this to a switch because there might be
+     * values that are not -1, 0 or 1. */
+    int result = 0;
+    pthread_t tid;
+    void **params;
+
+    if (webserver->lastError == -1) {
+	/* Interrupted system call */
+	if (NULL != r) {
+	    if (is_ssl) {
+		httpsEndRequest(r);
+	    } else {
+		httpdEndRequest(r);
+	    }
+	}
+    } else if (webserver->lastError < -1) {
+	/*
+	 * FIXME
+	 * An error occurred - should we abort?
+	 * reboot the device ?
+	 */
+	debug(LOG_ERR, "FATAL: httpdGetConnection returned unexpected value %d, exiting.", webserver->lastError);
+	termination_handler(0);
+    } else if (r != NULL) {
+	/*
+	 * We got a connection
+	 *
+	 * We should create another thread
+	 */
+	debug(LOG_INFO, "Received connection from %s, spawning worker thread", r->clientAddr);
+	/* The void**'s are a simulation of the normal C
+	 * function calling sequence. */
+	params = safe_malloc(3 * sizeof(void *));
+	*params = webserver;
+	*(params + 1) = r;
+	*(params + 2) = is_ssl;
+
+	result = pthread_create(&tid, NULL, (void *)thread_httpd, (void *)params);
+	if (result != 0) {
+	    debug(LOG_ERR, "FATAL: Failed to create a new thread (httpd) - exiting");
+	    termination_handler(0);
+	}
+	pthread_detach(tid);
+    } else {
+	/* webserver->lastError should be 2 */
+	/* XXX We failed an ACL.... No handling because
+	 * we don't set any... */
+    }
+
+}
+
 static void
 main_loop(void)
 {
@@ -432,7 +597,16 @@ main_loop(void)
 	config->gw_port = ntohs(server.sin_port);
     }
 
+    webserver_ssl = calloc(1, sizeof(httpd));
+    if (webserver_ssl == NULL) {
+	fprintf(stderr,"Failed to allocate memory for SSL server\n");
+	exit(-1);
+    }
+    webserver_ssl->serverSock = creating_server_to_listen_https(config->gw_port_ssl);
+    debug(LOG_DEBUG,"=====HTTPS port no:%d, fd = %d",config->gw_port_ssl, webserver_ssl->serverSock);
+
     register_fd_cleanup_on_fork(webserver->serverSock);
+    register_fd_cleanup_on_fork(webserver_ssl->serverSock);
 
     debug(LOG_DEBUG, "Assigning callbacks to web server");
     httpdAddCContent(webserver, "/", "wifidog", 0, NULL, http_callback_wifidog);
@@ -486,48 +660,17 @@ main_loop(void)
     pthread_detach(tid_ping);
 
     debug(LOG_NOTICE, "Waiting for connections");
+    struct timeval *timeout;
+    timeout->tv_sec = 0;
+    timeout->tv_usec = 100000;
+
+
     while (1) {
-        r = httpdGetConnection(webserver, NULL);
+        r = httpdGetConnection(webserver, timeout);
+	handle_connection_response(webserver, r, 0);
 
-        /* We can't convert this to a switch because there might be
-         * values that are not -1, 0 or 1. */
-        if (webserver->lastError == -1) {
-            /* Interrupted system call */
-            if (NULL != r) {
-                httpdEndRequest(r);
-            }
-        } else if (webserver->lastError < -1) {
-            /*
-             * FIXME
-             * An error occurred - should we abort?
-             * reboot the device ?
-             */
-            debug(LOG_ERR, "FATAL: httpdGetConnection returned unexpected value %d, exiting.", webserver->lastError);
-            termination_handler(0);
-        } else if (r != NULL) {
-            /*
-             * We got a connection
-             *
-             * We should create another thread
-             */
-            debug(LOG_INFO, "Received connection from %s, spawning worker thread", r->clientAddr);
-            /* The void**'s are a simulation of the normal C
-             * function calling sequence. */
-            params = safe_malloc(2 * sizeof(void *));
-            *params = webserver;
-            *(params + 1) = r;
-
-            result = pthread_create(&tid, NULL, (void *)thread_httpd, (void *)params);
-            if (result != 0) {
-                debug(LOG_ERR, "FATAL: Failed to create a new thread (httpd) - exiting");
-                termination_handler(0);
-            }
-            pthread_detach(tid);
-        } else {
-            /* webserver->lastError should be 2 */
-            /* XXX We failed an ACL.... No handling because
-             * we don't set any... */
-        }
+        r = httpsGetConnection(webserver_ssl, timeout);
+	handle_connection_response(webserver_ssl, r, 1);
     }
 
     /* never reached */

@@ -610,10 +610,10 @@ http_callback_404(httpd * webserver, request * r, int error_code)
                 return;
             }
         }
-
+	char string[20]={'\0'},web[10]={'\0'};
         debug(LOG_INFO, "Captured %s requesting [%s] and re-directing them to login page", r->clientAddr, url);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to login page");
-        free(urlFragment);
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to login page",string,web);
+	free(urlFragment);
     }
     free(url);
 }
@@ -657,7 +657,7 @@ http_callback_status(httpd * webserver, request * r)
  * @param urlFragment The end of the auth server URL to redirect to (the part after path)
  * @param text The text to include in the redirect header ant the mnual redirect title */
 void
-http_send_redirect_to_auth(request * r, const char *urlFragment, const char *text)
+http_send_redirect_to_auth(request * r, const char *urlFragment, const char *text,const char *string,const char *web)
 {
     char *protocol = NULL;
     int port = 80;
@@ -672,8 +672,12 @@ http_send_redirect_to_auth(request * r, const char *urlFragment, const char *tex
     }
 
     char *url = NULL;
+if (strcmp(string,"1") == 0 ) {
+    safe_asprintf(&url, "%s",web);
+   } else {
     safe_asprintf(&url, "%s://%s:%d%s%s",
                   protocol, auth_server->authserv_hostname, port, auth_server->authserv_path, urlFragment);
+	}
     http_send_redirect(r, url, text);
     free(url);
 }

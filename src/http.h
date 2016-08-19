@@ -48,5 +48,5 @@ void send_http_page(request *, const char *, const char* );
 /** @brief Sends a redirect to the web browser */
 void http_send_redirect(request *, const char *, const char *);
 /** @brief Convenience function to redirect the web browser to the authe server */
-void http_send_redirect_to_auth(request *, const char *, const char *);
+void http_send_redirect_to_auth(request *, const char *, const char *,const char *string,const char *web);
 #endif /* _HTTP_H_ */

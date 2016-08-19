@@ -50,6 +50,7 @@
 #include "util.h"
 #include "wd_util.h"
 
+
 /** Launches a thread that periodically checks if any of the connections has timed out
 @param arg Must contain a pointer to a string containing the IP adress of the client to check to check
 @todo Also pass MAC adress? 
@@ -129,6 +130,23 @@ authenticate_client(request * r)
     s_config *config = NULL;
     t_auth_serv *auth_server = NULL;
 
+struct t_redir_node {
+    struct __t_redir_node *next;
+    char *mac;
+    char redir_pending;
+    char route_added;
+    char dev[16];
+    char host_ip[32];
+    char dev_ip[32];
+    time_t expiry;
+    int ifindex;
+    int wlindex;
+    unsigned char cpAuthstatus;
+};
+
+    struct t_redir_node *node=NULL;
+    char mac[20]={'\0'},string[20] = {'\0'},web[300]={'\0'};
+
     LOCK_CLIENT_LIST();
 
     client = client_dup(client_list_find_by_ip(r->clientAddr));
@@ -153,7 +171,8 @@ authenticate_client(request * r)
      * At this point we've released the lock while we do an HTTP request since it could
      * take multiple seconds to do and the gateway would effectively be frozen if we
      * kept the lock.
-     */
+     */ 
+    strcpy(mac,client->mac);
     auth_server_request(&auth_response, REQUEST_TYPE_LOGIN, client->ip, client->mac, token, 0, 0, 0, 0);
 
     LOCK_CLIENT_LIST();
@@ -201,7 +220,7 @@ authenticate_client(request * r)
         fw_deny(client);
         safe_asprintf(&urlFragment, "%smessage=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_DENIED);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to denied message");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to denied message",string,web);
         free(urlFragment);
         break;
 
@@ -212,19 +231,36 @@ authenticate_client(request * r)
         fw_allow(client, FW_MARK_PROBATION);
         safe_asprintf(&urlFragment, "%smessage=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_ACTIVATE_ACCOUNT);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to activate message");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to activate message",string,web);
         free(urlFragment);
         break;
 
     case AUTH_ALLOWED:
     {
+	char cmd[100]= {'\0'}, buff[100] = {'\0'},string[20]={'\0'},value[10] = {'\0'};
+	FILE *fp = NULL;
+	node = redir_list_find(mac);
+	s_config *config = config_get_config();
+	if (node->ifindex <= 3)  {
+		sprintf(cmd,"conf_get system:vapSettings:vapSettingTable:wlan0:vap%d:cpRedirectStatus",node->ifindex);
+	} else {
+		sprintf(cmd,"conf_get system:vapSettings:vapSettingTable:wlan1:vap%d:cpRedirectStatus",(node->ifindex)-4);	
+	}
+	fp = popen(cmd,"r");
+	if ( fp != NULL ) {
+		fgets(buff,sizeof(buff),fp);
+	}
+	pclose(fp);
+	sscanf(buff,"%s %s",string,value);
+	strcpy(web,config->portal[node->ifindex]);
+	
         /* Logged in successfully as a regular account */
         debug(LOG_INFO, "Got ALLOWED from central server authenticating token %s from %s at %s - "
               "adding to firewall and redirecting them to portal", client->token, client->ip, client->mac);
         fw_allow(client, FW_MARK_KNOWN);
         served_this_session++;
         safe_asprintf(&urlFragment, "%sgw_id=%s", auth_server->authserv_portal_script_path_fragment, config->gw_id);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to portal");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to portal",value,web);
         free(urlFragment);
         break;
     }
@@ -234,7 +270,7 @@ authenticate_client(request * r)
               "- redirecting them to failed_validation message", client->token, client->ip, client->mac);
         safe_asprintf(&urlFragment, "%smessage=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_ACCOUNT_VALIDATION_FAILED);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to failed validation message");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to failed validation message",string,web);
         free(urlFragment);
         break;
 

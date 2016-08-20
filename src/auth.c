@@ -253,6 +253,13 @@ struct t_redir_node {
 	pclose(fp);
 	sscanf(buff,"%s %s",string,value);
 	strcpy(web,config->portal[node->ifindex]);
+	int i = 0;
+#if 0
+	for (i = 0; i < 8; i++ ) {
+		debug(LOG_DEBUG,"Portal %d url %s",i,config->portal[i]);
+	}
+	debug(LOG_INFO,"Redirection status:%s URL:%s index %d string %s",value,web,node->ifindex,config->portal[node->ifindex]);
+#endif
 	
         /* Logged in successfully as a regular account */
         debug(LOG_INFO, "Got ALLOWED from central server authenticating token %s from %s at %s - "
